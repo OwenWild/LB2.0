@@ -1,17 +1,194 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Resume Drive</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+    }
+    #controls, #fullscreen-btn, #pause-menu {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(255, 255, 255, 0.8);
+      padding: 10px;
+      font-family: sans-serif;
+      z-index: 10;
+    }
+    #fullscreen-btn {
+      top: auto;
+      bottom: 10px;
+    }
+    #pause-menu {
+      display: none;
+      top: 50px;
+      left: 50px;
+    }
+    #wrapper {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #game-container {
+      flex-grow: 1;
+      position: relative;
+    }
+  </style>
 </head>
 <body>
-    <h1>This is a test</h1>
-    <h1>Leaderboard</h1>
-    <form id="score-form">
-    <input type="text" id="name" placeholder="Name" required />
-    <input type="number" id="score" placeholder="Score" required />
-    <button type="submit">Submit</button>
-  </form>
+  <div id="wrapper">
+    <div id="header" style="padding: 10px; background: #eee; text-align: center; font-size: 24px;">Welcome to My Interactive Resume</div>
+    <div id="game-container">
+      <div id="controls">
+        <label>Move Forward: <input type="text" id="forwardKey" value="w"></label><br>
+        <label>Move Backward: <input type="text" id="backwardKey" value="s"></label><br>
+        <label>Move Left: <input type="text" id="leftKey" value="a"></label><br>
+        <label>Move Right: <input type="text" id="rightKey" value="d"></label><br>
+        <button onclick="updateControls()">Update Controls</button>
+        <button onclick="togglePauseMenu()">Pause Menu</button>
+      </div>
+      <div id="pause-menu">
+        <h3>Game Paused</h3>
+        <button onclick="resumeGame()">Resume</button>
+        <p>Use this menu to adjust settings or controls.</p>
+      </div>
+      <button id="fullscreen-btn" onclick="toggleFullscreen()">Toggle Fullscreen</button>
+    </div>
+    <div id="footer" style="padding: 10px; background: #eee; text-align: center;">Use WASD or custom keys to navigate.</div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128/examples/js/controls/OrbitControls.js"></script>
+  <script>
+    let scene, camera, renderer, cube, road, controls;
+    let moveSpeed = 0.1;
+    let keysPressed = {};
+    let isPaused = false;
+    let inputKeys = {
+      forward: 'w',
+      backward: 's',
+      left: 'a',
+      right: 'd'
+    };
+
+    function detectKeyboardLayout() {
+      const lang = navigator.language || navigator.userLanguage;
+      if (lang.includes('dvorak') || navigator.keyboardLayoutMap) {
+        inputKeys = { forward: ',', backward: 'o', left: 'a', right: 'e' };
+        document.getElementById('forwardKey').value = ',';
+        document.getElementById('backwardKey').value = 'o';
+        document.getElementById('leftKey').value = 'a';
+        document.getElementById('rightKey').value = 'e';
+      }
+    }
+
+    function togglePauseMenu() {
+      const menu = document.getElementById('pause-menu');
+      isPaused = !isPaused;
+      menu.style.display = isPaused ? 'block' : 'none';
+    }
+
+    function resumeGame() {
+      document.getElementById('pause-menu').style.display = 'none';
+      isPaused = false;
+    }
+
+    function init() {
+      detectKeyboardLayout();
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x87CEEB);
+      const light = new THREE.DirectionalLight(0xffffff, 1);
+      light.position.set(0, 10, 10);
+      scene.add(light);
+
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      document.getElementById('game-container').appendChild(renderer.domElement);
+
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.1;
+      controls.enablePan = false;
+
+      const cubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+      const cubeMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+      cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+      scene.add(cube);
+
+      const roadGeometry = new THREE.PlaneGeometry(10, 400);
+      const roadMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, side: THREE.DoubleSide });
+      road = new THREE.Mesh(roadGeometry, roadMaterial);
+      road.rotation.x = Math.PI / 2;
+      road.position.y = -0.5;
+      scene.add(road);
+
+      camera.position.set(0, 5, 10);
+      controls.target.copy(cube.position);
+
+      function animate() {
+        requestAnimationFrame(animate);
+        if (isPaused) return;
+
+        const direction = new THREE.Vector3();
+        camera.getWorldDirection(direction);
+        direction.y = 0;
+        direction.normalize();
+        const side = new THREE.Vector3().crossVectors(camera.up, direction).normalize();
+
+        if (keysPressed[inputKeys.forward]) cube.position.addScaledVector(direction, moveSpeed);
+        if (keysPressed[inputKeys.backward]) cube.position.addScaledVector(direction, -moveSpeed);
+        if (keysPressed[inputKeys.left]) cube.position.addScaledVector(side, moveSpeed);
+        if (keysPressed[inputKeys.right]) cube.position.addScaledVector(side, -moveSpeed);
+
+        cube.lookAt(cube.position.clone().add(direction));
+
+        controls.target.copy(cube.position);
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      animate();
+    }
+
+    function updateControls() {
+      inputKeys.forward = document.getElementById('forwardKey').value;
+      inputKeys.backward = document.getElementById('backwardKey').value;
+      inputKeys.left = document.getElementById('leftKey').value;
+      inputKeys.right = document.getElementById('rightKey').value;
+    }
+
+    function toggleFullscreen() {
+      const container = document.getElementById('game-container');
+      if (!document.fullscreenElement) {
+        container.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    window.addEventListener('keydown', (e) => { keysPressed[e.key] = true; });
+    window.addEventListener('keyup', (e) => { keysPressed[e.key] = false; });
+    window.addEventListener('mousedown', onDocumentMouseDown, false);
+    init();
+
+    function onDocumentMouseDown(event) {
+      event.preventDefault();
+      const mouse = new THREE.Vector2((event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1);
+      const raycaster = new THREE.Raycaster();
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(scene.children, true);
+      if (intersects.length > 0) {
+        const obj = intersects[0].object;
+        if (obj.userData.URL) window.open(obj.userData.URL, '_blank');
+      }
+    }
+  </script>
 </body>
 </html>
